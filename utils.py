@@ -34,10 +34,11 @@ def povm(proj, outcome, num_qubits, init_state, num_shots):
     raw = result.data.c.array
 
     counts = result.data.c.get_counts()
-    print(counts)
+    # print(f"{proj}, {outcome}: {counts}")
     freq = 0
     if(outcome in counts):
         freq = counts[outcome] / num_shots
+    # print(f"freq = {freq}")
     return freq
 
 def measure(projectors: list, init_state, num_qubits, num_shots=2048):
@@ -62,7 +63,111 @@ def norm(matrix):
     return np.sqrt(np.trace(matrix.T.conj() @ matrix))
 
 
-def naive_measure_operators(num_qubits):
+def not_so_silly_measure_operators(num_qubits):
+    def is_independent(system):
+        flatten = [matrix.flatten() for matrix in system]
+        flatten_matrix = np.asarray(flatten)
+        rank = np.linalg.matrix_rank(flatten_matrix)
+        return len(system) == rank
+
+    vecs = [
+        {'vec': np.asarray([[1], [0]]), 'outcome': '0', 'label': 'Z'},  # |0>
+        {'vec': np.asarray([[0], [1]]), 'outcome': '1', 'label': 'Z'},  # |1>
+        {'vec': np.asarray([[1/np.sqrt(2)], [1/np.sqrt(2)]]), 'outcome': '0', 'label': 'X'},  # |+>
+        {'vec': np.asarray([[1/np.sqrt(2)], [-1/np.sqrt(2)]]), 'outcome': '1', 'label': 'X'},  # |->
+        {'vec': np.asarray([[1/np.sqrt(2)], [1j/np.sqrt(2)]]), 'outcome': '0', 'label': 'Y'},  # |+i>
+        {'vec': np.asarray([[1/np.sqrt(2)], [-1j/np.sqrt(2)]]), 'outcome': '1', 'label': 'Y'},  # |-i>
+    ]
+    dim = 2 ** num_qubits # dim of state vector
+    dim2 = dim ** 2 # dim of density matrix
+    combinations = 6 ** num_qubits # possible combinations of pauli eigvectors
+
+    ops = [np.eye(dim),]
+    labels = []
+    for j in range(3):
+        for i in range(dim - 1):
+            k = i
+            m = vecs[2*j + k % 2]['vec'] @ vecs[2*j + k % 2]['vec'].T.conj()
+            l = vecs[2*j + k % 2]['label']
+            o = vecs[2*j + k % 2]['outcome']
+            for _ in range(num_qubits - 1):
+                k = k // 2
+                m = np.kron(m, vecs[2*j + k % 2]['vec'] @ vecs[2*j + k % 2]['vec'].T.conj())
+                l += vecs[2*j + k % 2]['label']
+                o += vecs[2*j + k % 2]['outcome']
+            ops.append(m)
+            if is_independent(ops):
+                labels.append((l, o))
+                print(f"pick {l}, {o}")
+            else:
+                ops.pop()
+            if len(ops) == dim2:
+                break
+
+    for i in range(combinations):
+        k = i
+        m = vecs[k % 6]['vec'] @ vecs[k % 6]['vec'].T.conj()
+        l = vecs[k % 6]['label']
+        o = vecs[k % 6]['outcome']
+        for _ in range(num_qubits - 1):
+            k = k // 6
+            m = np.kron(m, vecs[k % 6]['vec'] @ vecs[k % 6]['vec'].T.conj())
+            l += vecs[k % 6]['label']
+            o += vecs[k % 6]['outcome']
+        ops.append(m)
+        if is_independent(ops):
+            labels.append((l, o))
+            print(f"pick {l}, {o}")
+        else:
+            ops.pop()
+        if len(ops) == dim2:
+            break
+    return ops[1:], labels
+
+def silly_measure_operators(num_qubits):
+    def is_independent(system):
+        flatten = [matrix.flatten() for matrix in system]
+        flatten_matrix = np.asarray(flatten)
+        rank = np.linalg.matrix_rank(flatten_matrix)
+        return len(system) == rank
+
+    vecs = [
+        {'vec': np.asarray([[1], [0]]), 'outcome': '0', 'label': 'Z'},  # |0>
+        {'vec': np.asarray([[0], [1]]), 'outcome': '1', 'label': 'Z'},  # |1>
+        {'vec': np.asarray([[1/np.sqrt(2)], [1/np.sqrt(2)]]), 'outcome': '0', 'label': 'X'},  # |+>
+        {'vec': np.asarray([[1/np.sqrt(2)], [-1/np.sqrt(2)]]), 'outcome': '1', 'label': 'X'},  # |->
+        {'vec': np.asarray([[1/np.sqrt(2)], [1j/np.sqrt(2)]]), 'outcome': '0', 'label': 'Y'},  # |+i>
+        {'vec': np.asarray([[1/np.sqrt(2)], [-1j/np.sqrt(2)]]), 'outcome': '1', 'label': 'Y'},  # |-i>
+    ]
+    dim = 2 ** num_qubits # dim of state vector
+    dim2 = dim ** 2 # dim of density matrix
+    combinations = 6 ** num_qubits # possible combinations of pauli eigvectors
+
+    ops = [np.eye(dim),]
+    labels = []
+    for i in range(combinations):
+        k = i
+        m = vecs[k % 6]['vec'] @ vecs[k % 6]['vec'].T.conj()
+        l = vecs[k % 6]['label']
+        o = vecs[k % 6]['outcome']
+        for _ in range(num_qubits - 1):
+            k = k // 6
+            m = np.kron(m, vecs[k % 6]['vec'] @ vecs[k % 6]['vec'].T.conj())
+            l += vecs[k % 6]['label']
+            o += vecs[k % 6]['outcome']
+        ops.append(m)
+        if is_independent(ops):
+            labels.append((l, o))
+            print(f"pick {l}, {o}")
+        else:
+            ops.pop()
+        if len(ops) == dim2:
+            break
+    return ops[1:], labels
+    
+
+
+def manual_measure_operators(num_qubits):
     vecs = {
         '0': {'vec': np.asarray([[1], [0]]), 'outcome': '0', 'label': 'Z'},  # |0>
         '1': {'vec': np.asarray([[0], [1]]), 'outcome': '1', 'label': 'Z'},  # |1>
@@ -105,11 +210,33 @@ def naive_measure_operators(num_qubits):
             np.kron(oneop[4], oneop[0]),
             np.kron(oneop[4], oneop[2]),
         ]
+        # twoop = [
+        #     np.kron(oneop[4], oneop[4]),
+        #     np.kron(oneop[5], oneop[4]),
+        #     np.kron(oneop[0], oneop[4]),
+        #     np.kron(oneop[2], oneop[4]),
+        #     np.kron(oneop[4], oneop[5]),
+        #     np.kron(oneop[0], oneop[5]),
+        #     np.kron(oneop[2], oneop[5]),
+        #     np.kron(oneop[4], oneop[0]),
+        #     np.kron(oneop[5], oneop[0]),
+        #     np.kron(oneop[0], oneop[0]),
+        #     np.kron(oneop[2], oneop[0]),
+        #     np.kron(oneop[4], oneop[2]),
+        #     np.kron(oneop[5], oneop[2]),
+        #     np.kron(oneop[0], oneop[2]),
+        #     np.kron(oneop[2], oneop[2]),
+        # ]
         twoop_labels = [('XX', '00'), ('XX', '11'), ('XX', '01'),
                         ('YY', '00'), ('YY', '11'), ('YY', '01'),
                         ('ZZ', '00'), ('ZZ', '11'), ('ZZ', '01'),
                         ('XY', '00'), ('XZ', '00'), ('YZ', '00'),
                         ('YX', '00'), ('ZX', '00'), ('ZY', '00')]
+        # twoop_labels = [('ZZ', '00'), ('ZZ', '10'), ('XZ', '00'),
+        #                 ('YZ', '00'), ('ZZ', '01'), ('XZ', '01'),
+        #                 ('YZ', '01'), ('ZX', '00'), ('ZX', '10'),
+        #                 ('XX', '00'), ('YX', '00'), ('ZY', '00'),
+        #                 ('ZY', '10'), ('XY', '00'), ('YY', '00')]
         return twoop, twoop_labels
     else:
         pass
@@ -132,7 +259,7 @@ def reconstruct_by_basis(basis: list, coefs: list):
 
 def solve_exact(A, b):
     # exact solution
-    print(f'eigenvals(A) = {np.linalg.eigh(A)[0]}')
+    # print(f'eigenvals(A) = {np.linalg.eigh(A)[0]}')
     A_inv = np.linalg.inv(A)
     x = A_inv @ b
     return x
@@ -140,7 +267,7 @@ def solve_exact(A, b):
 def solve_ls(A, b):
     # least squares solution
     K = A.T.conj() @ A
-    print(f'eigenvals(K) = {np.linalg.eigh(K)[0]}')
+    # print(f'eigenvals(K) = {np.linalg.eigh(K)[0]}')
     x = np.linalg.inv(K) @ A.t.conj() @ b
     return x
 
