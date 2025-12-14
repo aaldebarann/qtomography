@@ -1,5 +1,7 @@
-import numpy as np
 import qiskit
-import qiskit.quantum_info
+import numpy as np
+from utils import *
+import scipy
+import os
 
-print(qiskit.quantum_info.pauli_basis(2).to_labels()[1:])
+print(get_povm_op('ZX', '10'))
