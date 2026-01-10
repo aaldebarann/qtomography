@@ -36,3 +36,5 @@ def state_sdgh(circ): # prepare 1/sqrt(2)( |0> + |1> ) state
         circ.h(i)
     return circ
 
+def state_Bell(circ): # prepare Bell state
+    pass

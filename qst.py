@@ -1,6 +1,6 @@
 import numpy as np
 from qiskit import QuantumCircuit
-from qiskit.primitives import StatevectorSampler
+from runner import Runner
 
 def povm(proj, outcome, num_qubits, init_state, num_shots):
     circuit = QuantumCircuit(num_qubits, num_qubits)
@@ -21,8 +21,8 @@ def povm(proj, outcome, num_qubits, init_state, num_shots):
             raise ValueError(f"UNKNOW proj at index {i}: {proj}")
         circuit.measure([ii], [ii])
     
-    sampler = StatevectorSampler()
-    pub = (circuit)
+    sampler = Runner("StateVector")
+    pub = circuit
     job = sampler.run([pub], shots=num_shots)
 
     # Extract the result for the 0th pub (this example only has one pub).
@@ -39,12 +39,56 @@ def povm(proj, outcome, num_qubits, init_state, num_shots):
 
     return freq
 
-def measure(projectors: list, init_state, num_qubits, num_shots=20480):
-    f = np.empty(shape=(len(projectors),), dtype=np.complex128)
-    for i, p in enumerate(projectors):
-        proj, outcome = p
-        f[i] = povm(proj, outcome, num_qubits, init_state, num_shots)
-    return np.asarray(f).astype(float)
+def measure(backend: Runner, projectors: list, init_state, num_qubits, num_shots=20480):
+    f = np.empty(shape=(len(projectors),), dtype=np.float32)
+    batch = []
+    proj, outcome = zip(*projectors)
+    N = len(projectors)
+    print(f"Run {N} measures")
+    for k in range(N):
+        circuit = QuantumCircuit(num_qubits, num_qubits)
+        circuit = init_state(circuit)
+
+        for i, p in enumerate(proj[k]):
+            ii = num_qubits - i - 1
+            if(p == 'X'):
+                circuit.h(ii)
+            elif(p == 'Y'):
+                circuit.sdg(ii)
+                circuit.h(ii)
+            elif(p == 'Z'):
+                pass
+            elif(p == 'I'):
+                pass
+            else:
+                raise ValueError(f"UNKNOW proj at index {i}: {proj[k]}")
+            circuit.measure([ii], [ii])
+        
+        batch.append(circuit)
+    
+    job = backend.run(batch, shots=num_shots)
+
+    # Extract the result for the 0th pub (this example only has one pub).
+    result = job.result()
+
+    if backend.backend_type == "StateVector":
+        for k in range(N):
+            counts = result[k].data.c.get_counts()
+            # print(f"{proj}, {outcome}: {counts}")
+            f[k] = 0
+            if(outcome[k] in counts):
+                f[k] = counts[outcome[k]] / num_shots
+    else:
+        for k in range(N):
+            counts = result.get_counts()[k]
+            f[k] = 0
+            if(outcome[k] in counts):
+                f[k] = counts[outcome[k]] / num_shots
+
+    # for i, p in enumerate(projectors):
+    #     proj, outcome = p
+    #     f[i] = povm(proj, outcome, num_qubits, init_state, num_shots)
+    return f
 
 def get_povm_op(observable, outcome):
     vecs = {
@@ -159,7 +203,24 @@ def silly_measure_operators(num_qubits):
         if len(ops) == dim2:
             break
     return labels
-    
+
+def transpile_measure_operators(measures, num_total, measured_idx):
+    transpiled = []
+    for item in measures:
+        obs, out = item
+        tobs = ''
+        tout = ''
+        for i in range(num_total):
+            if i in measured_idx:
+                tobs += obs[measured_idx.index(i)]
+                tout += out[measured_idx.index(i)]
+            else:
+                tobs += 'Z'
+                tout += '0'
+        transpiled.append((tobs, tout))
+    return transpiled
+
+
 def manual_measure_operators(num_qubits):
     if num_qubits == 1:
         return [
