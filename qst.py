@@ -62,6 +62,9 @@ def measure(backend: Runner, projectors: list, init_state, num_qubits, num_shots
                 pass
             else:
                 raise ValueError(f"UNKNOW proj at index {i}: {proj[k]}")
+        
+        for i, p in enumerate(proj[k]):
+            ii = num_qubits - i - 1
             circuit.measure([ii], [ii])
         
         batch.append(circuit)
@@ -304,6 +307,7 @@ def manual_measure_operators(num_qubits):
 def solve_exact(A, b):
     # exact solution
     # print(f'eigenvals(A) = {np.linalg.eigh(A)[0]}')
+    print(f"A.shape = {A.shape}, b.shape = {b.shape}")
     A_inv = np.linalg.inv(A)
     x = A_inv @ b
     return x
